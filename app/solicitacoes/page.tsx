@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import useSWR from "swr"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/button"
 import { Input } from "@/components/input"
@@ -8,87 +9,38 @@ import { Select } from "@/components/select"
 import { DataTable } from "@/components/data-table"
 import { Modal } from "@/components/modal"
 import { Badge } from "@/components/badge"
-import { Plus, Search, Edit, Trash2, Eye, User } from "lucide-react"
-
-type StatusSolicitacao = "PENDENTE" | "ATENDIDA"
-
-interface Solicitacao {
-  id: number
-  descricao: string
-  status: StatusSolicitacao
-  beneficiario: {
-    id: number
-    nome: string
-  }
-  dataCriacao?: string
-}
-
-const mockSolicitacoes: Solicitacao[] = [
-  {
-    id: 1,
-    descricao: "Necessito de roupas de inverno para familia de 4 pessoas",
-    status: "PENDENTE",
-    beneficiario: { id: 1, nome: "Ana Paula Oliveira" },
-    dataCriacao: "2024-01-15",
-  },
-  {
-    id: 2,
-    descricao: "Solicito alimentos basicos para o mes",
-    status: "ATENDIDA",
-    beneficiario: { id: 2, nome: "Carlos Eduardo" },
-    dataCriacao: "2024-01-10",
-  },
-  {
-    id: 3,
-    descricao: "Preciso de material escolar para 2 criancas",
-    status: "PENDENTE",
-    beneficiario: { id: 3, nome: "Fernanda Costa" },
-    dataCriacao: "2024-01-18",
-  },
-  {
-    id: 4,
-    descricao: "Cobertores para periodo de frio",
-    status: "ATENDIDA",
-    beneficiario: { id: 4, nome: "Roberto Almeida" },
-    dataCriacao: "2024-01-05",
-  },
-  {
-    id: 5,
-    descricao: "Medicamentos basicos",
-    status: "PENDENTE",
-    beneficiario: { id: 1, nome: "Ana Paula Oliveira" },
-    dataCriacao: "2024-01-20",
-  },
-]
+import { Plus, Search, Edit, Trash2, Eye, User, Loader2 } from "lucide-react"
+import { solicitacaoApi, beneficiarioApi, type Solicitacao, type Beneficiario } from "@/lib/api"
 
 const statusOptions = [
   { value: "PENDENTE", label: "Pendente" },
   { value: "ATENDIDA", label: "Atendida" },
 ]
 
-const beneficiarioOptions = [
-  { value: "1", label: "Ana Paula Oliveira" },
-  { value: "2", label: "Carlos Eduardo" },
-  { value: "3", label: "Fernanda Costa" },
-  { value: "4", label: "Roberto Almeida" },
-]
-
 export default function SolicitacoesPage() {
-  const [solicitacoes] = useState<Solicitacao[]>(mockSolicitacoes)
+  const { data: solicitacoes, error, isLoading, mutate } = useSWR("solicitacoes", solicitacaoApi.listar)
+  const { data: beneficiarios } = useSWR("beneficiarios", beneficiarioApi.listar)
+  
   const [searchTerm, setSearchTerm] = useState("")
   const [filterStatus, setFilterStatus] = useState("")
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isViewModalOpen, setIsViewModalOpen] = useState(false)
   const [selectedSolicitacao, setSelectedSolicitacao] = useState<Solicitacao | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     descricao: "",
-    status: "",
+    status: "PENDENTE" as "PENDENTE" | "ATENDIDA",
     beneficiarioId: "",
   })
 
-  const filteredSolicitacoes = solicitacoes.filter((sol) => {
+  const beneficiarioOptions = (beneficiarios || []).map((b) => ({
+    value: b.id?.toString() || "",
+    label: b.nome,
+  }))
+
+  const filteredSolicitacoes = (solicitacoes || []).filter((sol) => {
     const matchesSearch = sol.descricao.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      sol.beneficiario.nome.toLowerCase().includes(searchTerm.toLowerCase())
+      sol.beneficiario?.nome?.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = !filterStatus || sol.status === filterStatus
     return matchesSearch && matchesStatus
   })
@@ -103,7 +55,7 @@ export default function SolicitacoesPage() {
     setFormData({
       descricao: solicitacao.descricao,
       status: solicitacao.status,
-      beneficiarioId: solicitacao.beneficiario.id.toString(),
+      beneficiarioId: solicitacao.beneficiario?.id?.toString() || "",
     })
     setIsModalOpen(true)
   }
@@ -112,10 +64,51 @@ export default function SolicitacoesPage() {
     setSelectedSolicitacao(null)
     setFormData({
       descricao: "",
-      status: "",
+      status: "PENDENTE",
       beneficiarioId: "",
     })
     setIsModalOpen(true)
+  }
+
+  const handleDelete = async (solicitacao: Solicitacao) => {
+    if (!solicitacao.id) return
+    if (!confirm(`Tem certeza que deseja excluir esta solicitacao?`)) return
+    
+    try {
+      await solicitacaoApi.excluir(solicitacao.id)
+      mutate()
+    } catch (err) {
+      alert("Erro ao excluir solicitacao")
+      console.error(err)
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSubmitting(true)
+
+    const beneficiarioSelecionado = beneficiarios?.find(b => b.id?.toString() === formData.beneficiarioId)
+    
+    const solicitacaoData: Omit<Solicitacao, "id"> = {
+      descricao: formData.descricao,
+      status: formData.status,
+      beneficiario: beneficiarioSelecionado,
+    }
+
+    try {
+      if (selectedSolicitacao?.id) {
+        await solicitacaoApi.atualizar(selectedSolicitacao.id, solicitacaoData)
+      } else {
+        await solicitacaoApi.criar(solicitacaoData)
+      }
+      mutate()
+      setIsModalOpen(false)
+    } catch (err) {
+      alert("Erro ao salvar solicitacao")
+      console.error(err)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const columns = [
@@ -142,17 +135,8 @@ export default function SolicitacoesPage() {
       render: (sol: Solicitacao) => (
         <div className="flex items-center gap-2">
           <User className="h-4 w-4 text-muted-foreground" />
-          <span>{sol.beneficiario.nome}</span>
+          <span>{sol.beneficiario?.nome || "-"}</span>
         </div>
-      ),
-    },
-    {
-      key: "dataCriacao",
-      header: "Data",
-      render: (sol: Solicitacao) => (
-        <span className="text-muted-foreground">
-          {sol.dataCriacao ? new Date(sol.dataCriacao).toLocaleDateString("pt-BR") : "-"}
-        </span>
       ),
     },
     {
@@ -173,7 +157,7 @@ export default function SolicitacoesPage() {
             <Edit className="h-4 w-4" />
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); }}
+            onClick={(e) => { e.stopPropagation(); handleDelete(sol); }}
             className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/20 hover:text-destructive transition-colors"
           >
             <Trash2 className="h-4 w-4" />
@@ -182,6 +166,18 @@ export default function SolicitacoesPage() {
       ),
     },
   ]
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-destructive mb-2">Erro ao carregar solicitacoes</p>
+          <p className="text-muted-foreground text-sm">Verifique se a API esta rodando</p>
+          <Button onClick={() => mutate()} className="mt-4">Tentar novamente</Button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen">
@@ -211,11 +207,17 @@ export default function SolicitacoesPage() {
           />
         </div>
 
-        <DataTable
-          columns={columns}
-          data={filteredSolicitacoes}
-          emptyMessage="Nenhuma solicitacao encontrada"
-        />
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : (
+          <DataTable
+            columns={columns}
+            data={filteredSolicitacoes}
+            emptyMessage="Nenhuma solicitacao encontrada"
+          />
+        )}
       </div>
 
       <Modal
@@ -223,7 +225,7 @@ export default function SolicitacoesPage() {
         onClose={() => setIsModalOpen(false)}
         title={selectedSolicitacao ? "Editar Solicitacao" : "Nova Solicitacao"}
       >
-        <form className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="descricao" className="text-sm font-medium text-foreground">
               Descricao
@@ -234,6 +236,7 @@ export default function SolicitacoesPage() {
               value={formData.descricao}
               onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
               placeholder="Descreva a solicitacao..."
+              required
               className="mt-1.5 flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
@@ -243,7 +246,7 @@ export default function SolicitacoesPage() {
               id="status"
               options={statusOptions}
               value={formData.status}
-              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+              onChange={(e) => setFormData({ ...formData, status: e.target.value as "PENDENTE" | "ATENDIDA" })}
             />
             <Select
               label="Beneficiario"
@@ -257,7 +260,8 @@ export default function SolicitacoesPage() {
             <Button variant="outline" type="button" onClick={() => setIsModalOpen(false)}>
               Cancelar
             </Button>
-            <Button type="submit">
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {selectedSolicitacao ? "Salvar" : "Cadastrar"}
             </Button>
           </div>
@@ -283,17 +287,9 @@ export default function SolicitacoesPage() {
                 </Badge>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Data de Criacao</p>
-                <p className="text-foreground">
-                  {selectedSolicitacao.dataCriacao 
-                    ? new Date(selectedSolicitacao.dataCriacao).toLocaleDateString("pt-BR") 
-                    : "-"}
-                </p>
+                <p className="text-sm text-muted-foreground">Beneficiario</p>
+                <p className="text-foreground">{selectedSolicitacao.beneficiario?.nome || "-"}</p>
               </div>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Beneficiario</p>
-              <p className="text-foreground">{selectedSolicitacao.beneficiario.nome}</p>
             </div>
           </div>
         )}

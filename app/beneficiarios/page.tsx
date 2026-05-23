@@ -1,66 +1,31 @@
 "use client"
 
 import { useState } from "react"
+import useSWR from "swr"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/button"
 import { Input } from "@/components/input"
 import { DataTable } from "@/components/data-table"
 import { Modal } from "@/components/modal"
 import { Badge } from "@/components/badge"
-import { Plus, Search, Edit, Trash2, Eye, Mail, Phone } from "lucide-react"
-
-interface Contato {
-  email: string
-  telefone: string
-}
-
-interface Beneficiario {
-  id: number
-  nome: string
-  contato: Contato
-  totalSolicitacoes?: number
-}
-
-const mockBeneficiarios: Beneficiario[] = [
-  {
-    id: 1,
-    nome: "Ana Paula Oliveira",
-    contato: { email: "ana@email.com", telefone: "(21) 98888-1111" },
-    totalSolicitacoes: 5,
-  },
-  {
-    id: 2,
-    nome: "Carlos Eduardo",
-    contato: { email: "carlos@email.com", telefone: "(21) 98888-2222" },
-    totalSolicitacoes: 3,
-  },
-  {
-    id: 3,
-    nome: "Fernanda Costa",
-    contato: { email: "fernanda@email.com", telefone: "(21) 98888-3333" },
-    totalSolicitacoes: 8,
-  },
-  {
-    id: 4,
-    nome: "Roberto Almeida",
-    contato: { email: "roberto@email.com", telefone: "(21) 98888-4444" },
-    totalSolicitacoes: 2,
-  },
-]
+import { Plus, Search, Edit, Trash2, Eye, Mail, Phone, Loader2 } from "lucide-react"
+import { beneficiarioApi, type Beneficiario } from "@/lib/api"
 
 export default function BeneficiariosPage() {
-  const [beneficiarios] = useState<Beneficiario[]>(mockBeneficiarios)
+  const { data: beneficiarios, error, isLoading, mutate } = useSWR("beneficiarios", beneficiarioApi.listar)
+  
   const [searchTerm, setSearchTerm] = useState("")
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isViewModalOpen, setIsViewModalOpen] = useState(false)
   const [selectedBeneficiario, setSelectedBeneficiario] = useState<Beneficiario | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     nome: "",
     email: "",
     telefone: "",
   })
 
-  const filteredBeneficiarios = beneficiarios.filter((b) =>
+  const filteredBeneficiarios = (beneficiarios || []).filter((b) =>
     b.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
     b.contato.email.toLowerCase().includes(searchTerm.toLowerCase())
   )
@@ -90,6 +55,47 @@ export default function BeneficiariosPage() {
     setIsModalOpen(true)
   }
 
+  const handleDelete = async (beneficiario: Beneficiario) => {
+    if (!beneficiario.id) return
+    if (!confirm(`Tem certeza que deseja excluir o beneficiario "${beneficiario.nome}"?`)) return
+    
+    try {
+      await beneficiarioApi.excluir(beneficiario.id)
+      mutate()
+    } catch (err) {
+      alert("Erro ao excluir beneficiario")
+      console.error(err)
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSubmitting(true)
+
+    const beneficiarioData: Omit<Beneficiario, "id"> = {
+      nome: formData.nome,
+      contato: {
+        email: formData.email,
+        telefone: formData.telefone,
+      },
+    }
+
+    try {
+      if (selectedBeneficiario?.id) {
+        await beneficiarioApi.atualizar(selectedBeneficiario.id, beneficiarioData)
+      } else {
+        await beneficiarioApi.criar(beneficiarioData)
+      }
+      mutate()
+      setIsModalOpen(false)
+    } catch (err) {
+      alert("Erro ao salvar beneficiario")
+      console.error(err)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   const columns = [
     { key: "id", header: "ID" },
     { key: "nome", header: "Nome" },
@@ -110,10 +116,10 @@ export default function BeneficiariosPage() {
       ),
     },
     {
-      key: "totalSolicitacoes",
+      key: "solicitacoes",
       header: "Solicitacoes",
       render: (beneficiario: Beneficiario) => (
-        <Badge variant="default">{beneficiario.totalSolicitacoes} solicitacoes</Badge>
+        <Badge variant="default">{beneficiario.solicitacoes?.length || 0} solicitacoes</Badge>
       ),
     },
     {
@@ -134,7 +140,7 @@ export default function BeneficiariosPage() {
             <Edit className="h-4 w-4" />
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); }}
+            onClick={(e) => { e.stopPropagation(); handleDelete(beneficiario); }}
             className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/20 hover:text-destructive transition-colors"
           >
             <Trash2 className="h-4 w-4" />
@@ -143,6 +149,18 @@ export default function BeneficiariosPage() {
       ),
     },
   ]
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-destructive mb-2">Erro ao carregar beneficiarios</p>
+          <p className="text-muted-foreground text-sm">Verifique se a API esta rodando</p>
+          <Button onClick={() => mutate()} className="mt-4">Tentar novamente</Button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen">
@@ -166,11 +184,17 @@ export default function BeneficiariosPage() {
           </div>
         </div>
 
-        <DataTable
-          columns={columns}
-          data={filteredBeneficiarios}
-          emptyMessage="Nenhum beneficiario encontrado"
-        />
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : (
+          <DataTable
+            columns={columns}
+            data={filteredBeneficiarios}
+            emptyMessage="Nenhum beneficiario encontrado"
+          />
+        )}
       </div>
 
       <Modal
@@ -178,13 +202,14 @@ export default function BeneficiariosPage() {
         onClose={() => setIsModalOpen(false)}
         title={selectedBeneficiario ? "Editar Beneficiario" : "Novo Beneficiario"}
       >
-        <form className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <Input
             label="Nome"
             id="nome"
             value={formData.nome}
             onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
             placeholder="Nome completo"
+            required
           />
           <div className="grid grid-cols-2 gap-4">
             <Input
@@ -194,6 +219,7 @@ export default function BeneficiariosPage() {
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               placeholder="email@exemplo.com"
+              required
             />
             <Input
               label="Telefone"
@@ -201,13 +227,15 @@ export default function BeneficiariosPage() {
               value={formData.telefone}
               onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
               placeholder="(00) 00000-0000"
+              required
             />
           </div>
           <div className="flex justify-end gap-3 pt-4">
             <Button variant="outline" type="button" onClick={() => setIsModalOpen(false)}>
               Cancelar
             </Button>
-            <Button type="submit">
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {selectedBeneficiario ? "Salvar" : "Cadastrar"}
             </Button>
           </div>
@@ -237,7 +265,7 @@ export default function BeneficiariosPage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Total de Solicitacoes</p>
-              <Badge variant="default">{selectedBeneficiario.totalSolicitacoes} solicitacoes</Badge>
+              <Badge variant="default">{selectedBeneficiario.solicitacoes?.length || 0} solicitacoes</Badge>
             </div>
           </div>
         )}

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import useSWR from "swr"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/button"
 import { Input } from "@/components/input"
@@ -8,85 +9,37 @@ import { Select } from "@/components/select"
 import { DataTable } from "@/components/data-table"
 import { Modal } from "@/components/modal"
 import { Badge } from "@/components/badge"
-import { Plus, Search, Edit, Trash2, Eye, User } from "lucide-react"
-
-type StatusItem = "DISPONIVEL" | "INDISPONIVEL"
-
-interface Item {
-  id: number
-  nome: string
-  quantidade: number
-  status: StatusItem
-  doador: {
-    id: number
-    nome: string
-  }
-}
-
-const mockItens: Item[] = [
-  {
-    id: 1,
-    nome: "Camisetas",
-    quantidade: 25,
-    status: "DISPONIVEL",
-    doador: { id: 1, nome: "Joao Silva" },
-  },
-  {
-    id: 2,
-    nome: "Calcas Jeans",
-    quantidade: 15,
-    status: "DISPONIVEL",
-    doador: { id: 2, nome: "Maria Santos" },
-  },
-  {
-    id: 3,
-    nome: "Sapatos",
-    quantidade: 0,
-    status: "INDISPONIVEL",
-    doador: { id: 1, nome: "Joao Silva" },
-  },
-  {
-    id: 4,
-    nome: "Cobertores",
-    quantidade: 10,
-    status: "DISPONIVEL",
-    doador: { id: 3, nome: "Pedro Lima" },
-  },
-  {
-    id: 5,
-    nome: "Alimentos Nao Pereciveis",
-    quantidade: 50,
-    status: "DISPONIVEL",
-    doador: { id: 2, nome: "Maria Santos" },
-  },
-]
+import { Plus, Search, Edit, Trash2, Eye, User, Loader2 } from "lucide-react"
+import { itemApi, doadorApi, type Item, type Doador } from "@/lib/api"
 
 const statusOptions = [
   { value: "DISPONIVEL", label: "Disponivel" },
   { value: "INDISPONIVEL", label: "Indisponivel" },
 ]
 
-const doadorOptions = [
-  { value: "1", label: "Joao Silva" },
-  { value: "2", label: "Maria Santos" },
-  { value: "3", label: "Pedro Lima" },
-]
-
 export default function ItensPage() {
-  const [itens] = useState<Item[]>(mockItens)
+  const { data: itens, error, isLoading, mutate } = useSWR("itens", itemApi.listar)
+  const { data: doadores } = useSWR("doadores", doadorApi.listar)
+  
   const [searchTerm, setSearchTerm] = useState("")
   const [filterStatus, setFilterStatus] = useState("")
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isViewModalOpen, setIsViewModalOpen] = useState(false)
   const [selectedItem, setSelectedItem] = useState<Item | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     nome: "",
     quantidade: "",
-    status: "",
+    status: "DISPONIVEL" as "DISPONIVEL" | "INDISPONIVEL",
     doadorId: "",
   })
 
-  const filteredItens = itens.filter((item) => {
+  const doadorOptions = (doadores || []).map((d) => ({
+    value: d.id?.toString() || "",
+    label: d.nome,
+  }))
+
+  const filteredItens = (itens || []).filter((item) => {
     const matchesSearch = item.nome.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = !filterStatus || item.status === filterStatus
     return matchesSearch && matchesStatus
@@ -103,7 +56,7 @@ export default function ItensPage() {
       nome: item.nome,
       quantidade: item.quantidade.toString(),
       status: item.status,
-      doadorId: item.doador.id.toString(),
+      doadorId: item.doador?.id?.toString() || "",
     })
     setIsModalOpen(true)
   }
@@ -113,10 +66,52 @@ export default function ItensPage() {
     setFormData({
       nome: "",
       quantidade: "",
-      status: "",
+      status: "DISPONIVEL",
       doadorId: "",
     })
     setIsModalOpen(true)
+  }
+
+  const handleDelete = async (item: Item) => {
+    if (!item.id) return
+    if (!confirm(`Tem certeza que deseja excluir o item "${item.nome}"?`)) return
+    
+    try {
+      await itemApi.excluir(item.id)
+      mutate()
+    } catch (err) {
+      alert("Erro ao excluir item")
+      console.error(err)
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSubmitting(true)
+
+    const doadorSelecionado = doadores?.find(d => d.id?.toString() === formData.doadorId)
+    
+    const itemData: Omit<Item, "id"> = {
+      nome: formData.nome,
+      quantidade: parseInt(formData.quantidade) || 0,
+      status: formData.status,
+      doador: doadorSelecionado,
+    }
+
+    try {
+      if (selectedItem?.id) {
+        await itemApi.atualizar(selectedItem.id, itemData)
+      } else {
+        await itemApi.criar(itemData)
+      }
+      mutate()
+      setIsModalOpen(false)
+    } catch (err) {
+      alert("Erro ao salvar item")
+      console.error(err)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const columns = [
@@ -144,7 +139,7 @@ export default function ItensPage() {
       render: (item: Item) => (
         <div className="flex items-center gap-2">
           <User className="h-4 w-4 text-muted-foreground" />
-          <span>{item.doador.nome}</span>
+          <span>{item.doador?.nome || "-"}</span>
         </div>
       ),
     },
@@ -166,7 +161,7 @@ export default function ItensPage() {
             <Edit className="h-4 w-4" />
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); }}
+            onClick={(e) => { e.stopPropagation(); handleDelete(item); }}
             className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/20 hover:text-destructive transition-colors"
           >
             <Trash2 className="h-4 w-4" />
@@ -175,6 +170,18 @@ export default function ItensPage() {
       ),
     },
   ]
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-destructive mb-2">Erro ao carregar itens</p>
+          <p className="text-muted-foreground text-sm">Verifique se a API esta rodando</p>
+          <Button onClick={() => mutate()} className="mt-4">Tentar novamente</Button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen">
@@ -204,11 +211,17 @@ export default function ItensPage() {
           />
         </div>
 
-        <DataTable
-          columns={columns}
-          data={filteredItens}
-          emptyMessage="Nenhum item encontrado"
-        />
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : (
+          <DataTable
+            columns={columns}
+            data={filteredItens}
+            emptyMessage="Nenhum item encontrado"
+          />
+        )}
       </div>
 
       <Modal
@@ -216,13 +229,14 @@ export default function ItensPage() {
         onClose={() => setIsModalOpen(false)}
         title={selectedItem ? "Editar Item" : "Novo Item"}
       >
-        <form className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <Input
             label="Nome"
             id="nome"
             value={formData.nome}
             onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
             placeholder="Nome do item"
+            required
           />
           <div className="grid grid-cols-2 gap-4">
             <Input
@@ -232,13 +246,14 @@ export default function ItensPage() {
               value={formData.quantidade}
               onChange={(e) => setFormData({ ...formData, quantidade: e.target.value })}
               placeholder="0"
+              required
             />
             <Select
               label="Status"
               id="status"
               options={statusOptions}
               value={formData.status}
-              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+              onChange={(e) => setFormData({ ...formData, status: e.target.value as "DISPONIVEL" | "INDISPONIVEL" })}
             />
           </div>
           <Select
@@ -252,7 +267,8 @@ export default function ItensPage() {
             <Button variant="outline" type="button" onClick={() => setIsModalOpen(false)}>
               Cancelar
             </Button>
-            <Button type="submit">
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {selectedItem ? "Salvar" : "Cadastrar"}
             </Button>
           </div>
@@ -284,7 +300,7 @@ export default function ItensPage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Doador</p>
-              <p className="text-foreground">{selectedItem.doador.nome}</p>
+              <p className="text-foreground">{selectedItem.doador?.nome || "-"}</p>
             </div>
           </div>
         )}

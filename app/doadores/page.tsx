@@ -1,67 +1,24 @@
 "use client"
 
 import { useState } from "react"
+import useSWR from "swr"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/button"
 import { Input } from "@/components/input"
 import { DataTable } from "@/components/data-table"
 import { Modal } from "@/components/modal"
 import { Badge } from "@/components/badge"
-import { Plus, Search, Edit, Trash2, Eye, Mail, Phone, MapPin } from "lucide-react"
-
-interface Contato {
-  email: string
-  telefone: string
-}
-
-interface Endereco {
-  logradouro: string
-  numero: string
-  complemento?: string
-  bairro: string
-  cidade: string
-  uf: string
-  cep: string
-}
-
-interface Doador {
-  id: number
-  nome: string
-  contato: Contato
-  endereco: Endereco
-  totalItens?: number
-}
-
-const mockDoadores: Doador[] = [
-  {
-    id: 1,
-    nome: "Joao Silva",
-    contato: { email: "joao@email.com", telefone: "(21) 99999-1111" },
-    endereco: { logradouro: "Rua das Flores", numero: "123", bairro: "Centro", cidade: "Nova Iguacu", uf: "RJ", cep: "26255-000" },
-    totalItens: 15,
-  },
-  {
-    id: 2,
-    nome: "Maria Santos",
-    contato: { email: "maria@email.com", telefone: "(21) 99999-2222" },
-    endereco: { logradouro: "Av. Brasil", numero: "456", bairro: "Jardim", cidade: "Nova Iguacu", uf: "RJ", cep: "26255-100" },
-    totalItens: 8,
-  },
-  {
-    id: 3,
-    nome: "Pedro Lima",
-    contato: { email: "pedro@email.com", telefone: "(21) 99999-3333" },
-    endereco: { logradouro: "Rua Principal", numero: "789", complemento: "Apt 101", bairro: "Vila Nova", cidade: "Nova Iguacu", uf: "RJ", cep: "26255-200" },
-    totalItens: 23,
-  },
-]
+import { Plus, Search, Edit, Trash2, Eye, Mail, Phone, MapPin, Loader2 } from "lucide-react"
+import { doadorApi, type Doador } from "@/lib/api"
 
 export default function DoadoresPage() {
-  const [doadores] = useState<Doador[]>(mockDoadores)
+  const { data: doadores, error, isLoading, mutate } = useSWR("doadores", doadorApi.listar)
+  
   const [searchTerm, setSearchTerm] = useState("")
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isViewModalOpen, setIsViewModalOpen] = useState(false)
   const [selectedDoador, setSelectedDoador] = useState<Doador | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     nome: "",
     email: "",
@@ -75,7 +32,7 @@ export default function DoadoresPage() {
     cep: "",
   })
 
-  const filteredDoadores = doadores.filter((d) =>
+  const filteredDoadores = (doadores || []).filter((d) =>
     d.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
     d.contato.email.toLowerCase().includes(searchTerm.toLowerCase())
   )
@@ -119,6 +76,56 @@ export default function DoadoresPage() {
     setIsModalOpen(true)
   }
 
+  const handleDelete = async (doador: Doador) => {
+    if (!doador.id) return
+    if (!confirm(`Tem certeza que deseja excluir o doador "${doador.nome}"?`)) return
+    
+    try {
+      await doadorApi.excluir(doador.id)
+      mutate()
+    } catch (err) {
+      alert("Erro ao excluir doador")
+      console.error(err)
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSubmitting(true)
+
+    const doadorData: Omit<Doador, "id"> = {
+      nome: formData.nome,
+      contato: {
+        email: formData.email,
+        telefone: formData.telefone,
+      },
+      endereco: {
+        logradouro: formData.logradouro,
+        numero: formData.numero,
+        complemento: formData.complemento || undefined,
+        bairro: formData.bairro,
+        cidade: formData.cidade,
+        uf: formData.uf,
+        cep: formData.cep,
+      },
+    }
+
+    try {
+      if (selectedDoador?.id) {
+        await doadorApi.atualizar(selectedDoador.id, doadorData)
+      } else {
+        await doadorApi.criar(doadorData)
+      }
+      mutate()
+      setIsModalOpen(false)
+    } catch (err) {
+      alert("Erro ao salvar doador")
+      console.error(err)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   const columns = [
     { key: "id", header: "ID" },
     { key: "nome", header: "Nome" },
@@ -149,10 +156,10 @@ export default function DoadoresPage() {
       ),
     },
     {
-      key: "totalItens",
+      key: "itens",
       header: "Itens Doados",
       render: (doador: Doador) => (
-        <Badge variant="success">{doador.totalItens} itens</Badge>
+        <Badge variant="success">{doador.itens?.length || 0} itens</Badge>
       ),
     },
     {
@@ -173,7 +180,7 @@ export default function DoadoresPage() {
             <Edit className="h-4 w-4" />
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); }}
+            onClick={(e) => { e.stopPropagation(); handleDelete(doador); }}
             className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/20 hover:text-destructive transition-colors"
           >
             <Trash2 className="h-4 w-4" />
@@ -182,6 +189,18 @@ export default function DoadoresPage() {
       ),
     },
   ]
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-destructive mb-2">Erro ao carregar doadores</p>
+          <p className="text-muted-foreground text-sm">Verifique se a API esta rodando</p>
+          <Button onClick={() => mutate()} className="mt-4">Tentar novamente</Button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen">
@@ -205,11 +224,17 @@ export default function DoadoresPage() {
           </div>
         </div>
 
-        <DataTable
-          columns={columns}
-          data={filteredDoadores}
-          emptyMessage="Nenhum doador encontrado"
-        />
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : (
+          <DataTable
+            columns={columns}
+            data={filteredDoadores}
+            emptyMessage="Nenhum doador encontrado"
+          />
+        )}
       </div>
 
       <Modal
@@ -217,13 +242,14 @@ export default function DoadoresPage() {
         onClose={() => setIsModalOpen(false)}
         title={selectedDoador ? "Editar Doador" : "Novo Doador"}
       >
-        <form className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <Input
             label="Nome"
             id="nome"
             value={formData.nome}
             onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
             placeholder="Nome completo"
+            required
           />
           <div className="grid grid-cols-2 gap-4">
             <Input
@@ -233,6 +259,7 @@ export default function DoadoresPage() {
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               placeholder="email@exemplo.com"
+              required
             />
             <Input
               label="Telefone"
@@ -240,6 +267,7 @@ export default function DoadoresPage() {
               value={formData.telefone}
               onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
               placeholder="(00) 00000-0000"
+              required
             />
           </div>
           <div className="grid grid-cols-3 gap-4">
@@ -250,6 +278,7 @@ export default function DoadoresPage() {
                 value={formData.logradouro}
                 onChange={(e) => setFormData({ ...formData, logradouro: e.target.value })}
                 placeholder="Rua, Avenida..."
+                required
               />
             </div>
             <Input
@@ -258,6 +287,7 @@ export default function DoadoresPage() {
               value={formData.numero}
               onChange={(e) => setFormData({ ...formData, numero: e.target.value })}
               placeholder="123"
+              required
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -274,6 +304,7 @@ export default function DoadoresPage() {
               value={formData.bairro}
               onChange={(e) => setFormData({ ...formData, bairro: e.target.value })}
               placeholder="Bairro"
+              required
             />
           </div>
           <div className="grid grid-cols-3 gap-4">
@@ -283,6 +314,7 @@ export default function DoadoresPage() {
               value={formData.cidade}
               onChange={(e) => setFormData({ ...formData, cidade: e.target.value })}
               placeholder="Cidade"
+              required
             />
             <Input
               label="UF"
@@ -290,6 +322,7 @@ export default function DoadoresPage() {
               value={formData.uf}
               onChange={(e) => setFormData({ ...formData, uf: e.target.value })}
               placeholder="RJ"
+              required
             />
             <Input
               label="CEP"
@@ -297,13 +330,15 @@ export default function DoadoresPage() {
               value={formData.cep}
               onChange={(e) => setFormData({ ...formData, cep: e.target.value })}
               placeholder="00000-000"
+              required
             />
           </div>
           <div className="flex justify-end gap-3 pt-4">
             <Button variant="outline" type="button" onClick={() => setIsModalOpen(false)}>
               Cancelar
             </Button>
-            <Button type="submit">
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {selectedDoador ? "Salvar" : "Cadastrar"}
             </Button>
           </div>
@@ -344,7 +379,7 @@ export default function DoadoresPage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Total de Itens Doados</p>
-              <Badge variant="success">{selectedDoador.totalItens} itens</Badge>
+              <Badge variant="success">{selectedDoador.itens?.length || 0} itens</Badge>
             </div>
           </div>
         )}
