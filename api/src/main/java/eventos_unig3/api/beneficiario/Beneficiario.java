@@ -5,6 +5,7 @@ import eventos_unig3.api.contato.Contato;
 import eventos_unig3.api.item.Item;
 import eventos_unig3.api.solicitacao.Solicitacao;
 import jakarta.persistence.*;
+import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -66,6 +67,33 @@ public class Beneficiario {
 
 
         this.contato = new Contato(dados.contato());
+
+
+
+    }
+
+
+    public void atualizarInformacoes(@Valid DadosAtualizacaoBeneficiarios dados) {
+
+
+        if (dados.nome() != null) {
+
+
+            this.nome = dados.nome();
+
+
+
+        }
+
+
+        if (dados.contato() != null) {
+
+
+            this.contato.atualizarInformacoes(dados.contato());
+
+
+
+        }
 
 
 

@@ -36,7 +36,10 @@ public class Solicitacao {
     private String descricao;
 
 
-    private String status;
+    @Enumerated(EnumType.STRING)
+
+
+    private StatusSolicitacao status;
 
 
     @ManyToOne
@@ -59,6 +62,32 @@ public class Solicitacao {
 
         this.beneficiario = beneficiario;
 
+
+
+    }
+
+
+    public void atualizarInformacoes(DadosAtualizacaoSolicitacoes dados) {
+
+
+        if (dados.descricao() != null) {
+
+
+            this.descricao = dados.descricao();
+
+
+
+        }
+
+
+        if (dados.status() != null) {
+
+
+            this.status = dados.status();
+
+
+
+        }
 
 
     }

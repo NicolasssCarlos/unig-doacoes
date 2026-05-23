@@ -37,5 +37,31 @@ public class Contato {
     }
 
 
+    public void atualizarInformacoes(DadosContato contato) {
+
+
+        if (contato.email() != null) {
+
+
+            this.email = contato.email();
+
+
+
+        }
+
+
+        if (contato.telefone() != null) {
+
+
+            this.telefone = contato.telefone();
+
+
+
+        }
+
+
+
+    }
+
 
 }

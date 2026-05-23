@@ -1,10 +1,7 @@
 package eventos_unig3.api.controller;
 
 import eventos_unig3.api.doador.DoadorRepository;
-import eventos_unig3.api.item.DadosCadastroItem;
-import eventos_unig3.api.item.DadosListagemItem;
-import eventos_unig3.api.item.Item;
-import eventos_unig3.api.item.ItemRepository;
+import eventos_unig3.api.item.*;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import org.hibernate.cache.spi.support.AbstractReadWriteAccess;
@@ -74,6 +71,42 @@ import org.springframework.web.bind.annotation.*;
             }
 
 
+            @PutMapping
+
+
+            @Transactional
+
+
+            public void atualizar(@RequestBody @Valid DadosAtualizacaoItem dados) {
+
+
+                var item = repository.getReferenceById(dados.id());
+
+
+                item.atualizarInformacoes(dados);
+
+
+
+            }
+
+
+            @DeleteMapping("/{id}")
+
+
+            @Transactional
+
+
+            public void excluir(@PathVariable Long id) {
+
+
+                repository.deleteById(id);
+
+
+
+            }
+
+
 
         }
+
 

@@ -44,7 +44,10 @@ public class Item {
     private int quantidade;
 
 
-    private String status;
+    @Enumerated(EnumType.STRING)
+
+
+    private StatusItem status;
 
 
     @ManyToOne
@@ -69,6 +72,42 @@ public class Item {
 
 
         this.doador = doador;
+
+
+
+    }
+
+
+    public void atualizarInformacoes(@Valid DadosAtualizacaoItem dados) {
+
+
+        if (dados.nome() != null) {
+
+
+            this.nome = dados.nome();
+
+
+
+        }
+
+        if (dados.quantidade() != null) {
+
+
+            this.quantidade = dados.quantidade();
+
+
+
+        }
+
+
+        if (dados.status() != null) {
+
+
+            this.status = dados.status();
+
+
+
+        }
 
 
 

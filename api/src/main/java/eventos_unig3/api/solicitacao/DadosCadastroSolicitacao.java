@@ -15,7 +15,7 @@ public record DadosCadastroSolicitacao(
         @NotBlank
 
 
-        String status,
+        StatusSolicitacao status,
 
 
         @NotNull

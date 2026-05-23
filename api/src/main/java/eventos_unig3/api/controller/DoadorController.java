@@ -54,4 +54,40 @@ public class DoadorController {
 
 
     }
+
+
+    @PutMapping
+
+
+    @Transactional
+
+
+    public void atualizar(@RequestBody @Valid DadosAtualizacaoDoadores dados) {
+
+
+        var doador = repository.getReferenceById(dados.id());
+
+
+        doador.atualizarInformacoes(dados);
+
+
+
+    }
+
+
+    @DeleteMapping("/{id}")
+
+
+    @Transactional
+
+
+    public void deletar(@PathVariable Long id) {
+
+
+        repository.deleteById(id);
+
+
+
+    }
+
 }

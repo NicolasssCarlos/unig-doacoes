@@ -23,10 +23,10 @@ public record DadosCadastroItem(
         Integer quantidade,
 
 
-        @NotBlank
+        @NotNull
 
 
-        String status,
+        StatusItem status,
 
 
         @NotNull

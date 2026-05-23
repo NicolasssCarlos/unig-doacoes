@@ -1,9 +1,6 @@
 package eventos_unig3.api.controller;
 
-import eventos_unig3.api.beneficiario.Beneficiario;
-import eventos_unig3.api.beneficiario.BeneficiarioRepository;
-import eventos_unig3.api.beneficiario.DadosCadastroBeneficiario;
-import eventos_unig3.api.beneficiario.DadosListagemBeneficiario;
+import eventos_unig3.api.beneficiario.*;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,6 +51,41 @@ public class BeneficiarioController {
 
     }
 
+
+    @PutMapping
+
+
+    @Transactional
+
+
+    public void atualizar(@RequestBody @Valid DadosAtualizacaoBeneficiarios dados) {
+
+
+        var beneficiario = repository.getReferenceById(dados.id());
+
+
+        beneficiario.atualizarInformacoes(dados);
+
+
+
+    }
+
+    @DeleteMapping("/{id}")
+
+
+    @Transactional
+
+
+    public void deletar(@PathVariable Long id) {
+
+
+        var beneficiario = repository.getReferenceById(id);
+
+
+        repository.deleteById(id);
+
+
+    }
 
 
 }
