@@ -9,7 +9,7 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: "UNIG Doacoes - Sistema de Gestao de Doacoes",
+  title: "UNIG Doacoes",
   description: "Sistema de gestao de doacoes da UNIG",
 }
 
